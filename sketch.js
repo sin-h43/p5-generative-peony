@@ -3,22 +3,30 @@ const sketch = function(p) {
   let ringRadius = 0;
   let phase = 'growing';
   
-  // How many petals do we want in our ring?
   const numPetals = 12;
+  //variable to hold hidden canvas
+  let buffer;
 
   p.setup = function() {
     p.createCanvas(600, 400);
     // Angles in p5 are calculated in radians by default, not degrees.
     // TWO_PI is a built-in variable equal to a full 360-degree circle.
+
+    //create the hidden canvas (400x400 pixcels)
+    buffer = p.createGraphics(400,400);
   };
 
-  p.draw = function() {
+ p.draw = function() {
     p.background(0); 
-    p.fill(255, 100, 150); 
-    p.noStroke();
 
-    const centerX = p.width / 2;
-    const centerY = p.height / 2;
+    //drawing to the hidden buffer
+    buffer.background(30); //dark gray
+    buffer.fill(255, 100, 150); 
+    buffer.noStroke();
+
+    //center is now relative to the 400x400 buffer
+    const centerX = buffer.width / 2;
+    const centerY = buffer.height / 2;
 
     // --- THE GENERATIVE LOOP ---
     
@@ -34,8 +42,12 @@ const sketch = function(p) {
       let y = centerY + (ringRadius * p.sin(angle));
       
       // 3. Draw the petal at that location
-      p.circle(x, y, 30);
+      buffer.circle(x, y, 30);
     }
+
+    //display the buffer
+    //hidden buffer onto the main canvas like photograph
+    p.image(buffer, 100,0); //(imageobj, xPosition, yPosition)
 
     // --- THE STATE MACHINE (from Stage 3) ---
     
@@ -44,8 +56,7 @@ const sketch = function(p) {
       if (ringRadius >= 150) {
         phase = 'shrinking'; 
       }
-    } 
-    else if (phase === 'shrinking') {
+    }else if (phase === 'shrinking') {
       ringRadius -= 2;
       if (ringRadius <= 0) {
         phase = 'growing';
