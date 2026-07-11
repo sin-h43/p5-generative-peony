@@ -1,5 +1,7 @@
 const sketch = function(p) {
   
+  
+  let bloom = 0;
   let ringRadius = 0;
   let phase = 'growing';
   
@@ -26,6 +28,20 @@ const sketch = function(p) {
     p.textFont('Courier New');
   };
 
+  //custom 3d math engine
+  //cal new x,y,z coordinates based on cam rotation
+  function rot3D(x, y, z, rotX, rotY) {
+    // 1. Rotate around X-axis (Pitch)
+    let ry = y * p.cos(rotX) - z * p.sin(rotX);
+    let rz = y * p.sin(rotX) + z * p.cos(rotX);
+    
+    // 2. Rotate around Y-axis (Yaw)
+    let rx = x * p.cos(rotY) + rz * p.sin(rotY);
+    let finalZ = -x * p.sin(rotY) + rz * p.cos(rotY);
+    
+    return [rx, ry, finalZ];
+  }
+
  p.draw = function() {
     p.background(0); 
 
@@ -37,19 +53,45 @@ const sketch = function(p) {
     //center is now relative to the 400x400 buffer
     const centerX = buffer.width / 2;
     const centerY = buffer.height / 2;
+    const focal = 300; //simulates camera lens distance
+    const maxRadius = 120; //max size of the flower
 
-    // --- THE GENERATIVE LOOP ---
+    // Map mouse position to a rotation angle (-1 to 1 radians)
+    let mouseRotX = p.map(p.mouseY, 0, p.height, 1, -1);
+    let mouseRotY = p.map(p.mouseX, 0, p.width, -1, 1);
     
+    // --- THE GENERATIVE LOOP ---
     // A 'for' loop runs a specific block of code multiple times in one frame.
     for (let i = 0; i < numPetals; i++) {
-      // 1. Calculate the angle for this specific petal
+      // Calculate the angle for this specific petal
       // We divide a full circle (TWO_PI) by the number of petals, then multiply by 'i'
       let angle = (p.TWO_PI / numPetals) * i;
-      // 2. Apply Trig to find the exact X and Y on the ring
-      let x = centerX + (ringRadius * p.cos(angle));
-      let y = centerY + (ringRadius * p.sin(angle));
-      // 3. Draw the petal at that location
-      buffer.circle(x, y, 30);
+
+      //calculate flat 3D circle (y=0)
+      let x3D = p.cos(angle)*(maxRadius*bloom);
+      let y3D = 0;
+      let z3D = p.sin(angle)*(maxRadius*bloom);
+
+      //applying the rotation matrix to our coordinates
+      let [rx,ry,rz] = rot3D(x3D, y3D, z3D, mouseRotX, mouseRotY);
+
+      //perspective projection: shrink coordinates based on Z dept
+      let scale = focal / (focal +rz);
+
+      //map 3D points back to 2D screen coordinates
+      let screenX = centerX + (rx*scale);
+      let screenY = centerY + (ry*scale);
+
+      //dynamic lighting
+      //map Z-dept to brightness. Closer (negative rz) = brighter
+      let lightMod = p.map(rz, -100, 100, 1.4,0.2);
+
+      let r = p.constrain(255 * lightMod, 0, 255);
+      let g = p.constrain(100 * lightMod, 0, 255);
+      let b = p.constrain(150 * lightMod, 0, 255);
+
+      buffer.fill(r,g,b);
+      buffer.circle(screenX, screenY, 40*scale);
     }
 
     //pixel reading & ASCII Rendering
@@ -68,11 +110,11 @@ const sketch = function(p) {
 
             //extract the RGB values
             const r = buffer.pixels[index];
-            const g = buffer.pixels[index+1];
-            const b = buffer.pixels[index+2];
+            const g = buffer.pixels[index + 1];
+            const b = buffer.pixels[index + 2];
 
             //cal avg brightness (0 to 255)
-            const brightness = (r+g+b)/3;
+            const brightness = (r + g + b) / 3;
 
             //only draw a char if the pixel isn't part of the black  bg
             if (brightness > 10) {
@@ -93,11 +135,11 @@ const sketch = function(p) {
 
     // --- THE STATE MACHINE (from Stage 3) ---
     if (phase === 'growing') {
-      ringRadius += 2;
-      if (ringRadius >= 150) phase = 'shrinking'; 
+      bloom += 0.02;
+      if (bloom >= 1) phase = 'shrinking'; 
     }else if (phase === 'shrinking') {
-      ringRadius -= 2;
-      if (ringRadius <= 0) phase = 'growing';
+      bloom -= 0.02;
+      if (bloom <= 0) phase = 'growing';
     }
 
   };
