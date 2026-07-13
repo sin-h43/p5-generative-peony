@@ -13,12 +13,17 @@ const sketch = function(p) {
   const density = ' .:-=+*#%@'
 
   p.setup = function() {
-    p.createCanvas(600, 600);
+    p.createCanvas(p.windowWidth, p.windowHeight);
+
+    p.pixelDensity(1); //lock main canvas resolution
     // Angles in p5 are calculated in radians by default, not degrees.
     // TWO_PI is a built-in variable equal to a full 360-degree circle.
 
     // 1. First, we CREATE the buffer
-    buffer = p.createGraphics(600, 600);
+    buffer = p.createGraphics(400, 400);
+    p.frameRate(30);
+
+    buffer.pixelDensity(1); //lock the hidden buffre resolution
     
     // 2. ONLY THEN can we modify the buffer's canvas settings
     buffer.canvas.getContext('2d', { willReadFrequently: true });
@@ -61,7 +66,7 @@ const sketch = function(p) {
 
     //flower parameters
     const layers = 14;
-    const maxRadius = 150;
+    const maxRadius = 130;
     const ruffleAmt = 12;
     let items = []; //array to hold all our petals bfr drawing
     
@@ -193,7 +198,7 @@ const sketch = function(p) {
     buffer.loadPixels();
 
     //multi- model rendering engine
-    const gridSize = 8;
+    const gridSize = 10;
 
     // Calculate dynamic offsets to perfectly center the buffer on any screen size
     const offsetX = (p.width - buffer.width) / 2; 
