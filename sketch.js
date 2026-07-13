@@ -6,6 +6,9 @@ const sketch = function(p) {
   
   //variable to hold hidden canvas
   let buffer;
+
+  //variable to track our current visual style
+  let renderMode =0;
   //string of characters from darkest to brightest
   const density = ' .:-=+*#%@'
 
@@ -91,7 +94,9 @@ const sketch = function(p) {
         let sy = ry * scale;
 
         // 4. Calculate dynamic lighting based on Z depth and layer position
-        let lightMod = p.map(rz, -150, 150, 1.3, 0.4);
+        let lightAngle = p.sin(angle + layer*0.05);
+        let depthDarken = p.map(layer, 0, layers, 0.3, 1.0);
+        let lightMod = p.map(lightAngle, -1, 1, 0.4, 1.3)*depthDarken;
         let rCol = p.constrain(p.lerp(230, 255, lr) * lightMod, 0, 255);
         let gCol = p.constrain(p.lerp(130, 210, lr) * lightMod, 0, 255);
         let bCol = p.constrain(p.lerp(170, 235, lr) * lightMod, 0, 255);
@@ -106,8 +111,7 @@ const sketch = function(p) {
         items.push({ 
           z: rz, x: sx, y: sy, angle: pAngle, 
           pl: pLength, pw: pWidth, phase: rPhase, 
-          r: rCol, g: gCol, b: bCol ,
-          scale:scale 
+          r: rCol, g: gCol, b: bCol 
         });
       }
     }
@@ -124,7 +128,10 @@ const sketch = function(p) {
       buffer.push();
       buffer.translate(it.x, it.y);
       buffer.rotate(it.angle);
+
       buffer.fill(it.r,it.g,it.b);
+      buffer.stroke(0,0,0,60);
+      buffer.strokeWeight(1.5);
 
       //draw the custom ruffled petal shape using vetices
       buffer.beginShape();
@@ -132,14 +139,14 @@ const sketch = function(p) {
       for (let tt = 0; tt <= 1; tt += 0.1) {
         let px = tt * it.pl;
         let bW = p.sin(tt * p.PI) * it.pw;
-        let ruf = p.sin(tt * 8 + it.phase) * ruffleAmt * it.scale * tt;
+        let ruf = p.sin(tt * 8 + it.phase) * ruffleAmt * 1* tt;
         buffer.vertex(px, bW + ruf);
       }
       // Draw bottom half of the petal curve
       for (let tt = 1; tt >= 0; tt -= 0.1) {
         let px = tt * it.pl;
         let bW = p.sin(tt * p.PI) * it.pw;
-        let ruf = p.sin(tt * 8 + it.phase + p.PI) * ruffleAmt * it.scale * tt;
+        let ruf = p.sin(tt * 8 + it.phase + p.PI) * ruffleAmt * 1 * tt;
         buffer.vertex(px, -bW + ruf);
       }
       buffer.endShape(p.CLOSE);
@@ -185,9 +192,12 @@ const sketch = function(p) {
     //cmd p5 to load the current fram's pixel data iinto memory
     buffer.loadPixels();
 
-    //spacing for our ASCII characters
+    //multi- model rendering engine
     const gridSize = 8;
-    const offsetX = 100;
+
+    // Calculate dynamic offsets to perfectly center the buffer on any screen size
+    const offsetX = (p.width - buffer.width) / 2; 
+    const offsetY = (p.height - buffer.height) / 2;
 
     //scan the buffer in a grid (y first, then x)
     for(let y=0; y<buffer.height; y+=gridSize){
@@ -205,13 +215,27 @@ const sketch = function(p) {
 
             //only draw a char if the pixel isn't part of the black  bg
             if (brightness > 10) {
+              p.fill(r,g,b);
+              if(renderMode === 0){
                 //map 0-255 brightness to a number btwn 0and the len of our string
                 const charIndex = p.floor(p.map(brightness, 0, 255, 0, density.length -1));
                 const asciiChar = density.charAt(charIndex);
 
                 //color the txt to match the pixel and draw it
-                p.fill(r,g,b);
                 p.text(asciiChar, x + offsetX, y);
+              }else if (renderMode === 1){
+                // MODE 1: DOTS
+                // Size is influenced by brightness so lighter areas have bigger dots
+                const d = gridSize * (0.2 + brightness * 0.0035);
+                p.noStroke();
+                p.ellipse(x + offsetX, y, d, d);
+              } else if (renderMode === 2){
+                // MODE 2: SOLID BLOCKS
+                p.rectMode(p.CENTER);
+                p.noStroke();
+                // Draw a square slightly smaller than the grid size to create a mosaic
+                p.rect(x + offsetX, y, gridSize * 0.9, gridSize * 0.9);
+              }
             }
         }
     }
@@ -228,8 +252,20 @@ const sketch = function(p) {
       bloom -= 0.005;
       if (bloom <= 0.1) phase = 'growing';
     }
-
   };
+  
+  //keyboard interactivity
+  //built-in p5 function fires whenever a key is pressed
+  p.keyPressed = function(){
+    if(p.key === 'm' || p.key === 'M'){
+      //renderMode++. the %3 ensure it loops back to 0 after hitting 2
+      renderMode = (renderMode + 1)% 3;
+    }
+  };
+
+  p.windowResized = function () {
+    p.resizeCanvas (p.windowWidth, p.windowHeight);
+  }
 };
 
 new p5(sketch, document.getElementById('p5-container'));
