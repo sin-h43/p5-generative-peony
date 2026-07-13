@@ -1,23 +1,21 @@
 const sketch = function(p) {
   
   
-  let bloom = 0;
-  let ringRadius = 0;
+  let bloom = 0.1;
   let phase = 'growing';
   
-  const numPetals = 12;
   //variable to hold hidden canvas
   let buffer;
   //string of characters from darkest to brightest
   const density = ' .:-=+*#%@'
 
   p.setup = function() {
-    p.createCanvas(600, 400);
+    p.createCanvas(600, 600);
     // Angles in p5 are calculated in radians by default, not degrees.
     // TWO_PI is a built-in variable equal to a full 360-degree circle.
 
     // 1. First, we CREATE the buffer
-    buffer = p.createGraphics(400, 400);
+    buffer = p.createGraphics(600, 600);
     
     // 2. ONLY THEN can we modify the buffer's canvas settings
     buffer.canvas.getContext('2d', { willReadFrequently: true });
@@ -47,59 +45,148 @@ const sketch = function(p) {
 
     //drawing to the hidden buffer
     buffer.background(0); //dark gray
-    buffer.fill(255, 100, 150); 
     buffer.noStroke();
 
     //center is now relative to the 400x400 buffer
     const centerX = buffer.width / 2;
     const centerY = buffer.height / 2;
-    const focal = 300; //simulates camera lens distance
-    const maxRadius = 120; //max size of the flower
+    const focal = 420; //simulates camera lens distance
 
     // Map mouse position to a rotation angle (-1 to 1 radians)
-    let mouseRotX = p.map(p.mouseY, 0, p.height, 1, -1);
-    let mouseRotY = p.map(p.mouseX, 0, p.width, -1, 1);
+    let mouseRotX = p.map(p.mouseY, 0, p.height, 1.2, -1.2);
+    let mouseRotY = p.map(p.mouseX, 0, p.width, -1.8, 1.8);
+
+    //flower parameters
+    const layers = 14;
+    const maxRadius = 150;
+    const ruffleAmt = 12;
+    let items = []; //array to hold all our petals bfr drawing
     
+    //Generating the layers
+    for (let layer = layers; layer >=0;layer--){
+      //lr  goes from 0(center) to 1(outer edge)
+      const lr = layer/layers;
+      //cal how many petals this specific layer needs
+      const np = 9 + p.floor(layer * 1.5);
+      //inner petals are smaller, outer petals are layer
+      const baseR = p.lerp(10, maxRadius, lr);
+      //cal the "bowl" shape title of the layer
+      let tiltAngle = p.lerp(p.PI * .42, p.PI*0.04, bloom);
+
+      for (let i = 0; i<np; i++){
+        //offset the angle so petals overlap organically
+        let angle = (p.TWO_PI / np)*i + layer*0.42;
+
+        //1. calculate base 3D coordinates based on tilt and bloom
+        let x3 = p.cos(angle) * (baseR * bloom) * p.cos(tiltAngle);
+        let z3 = p.sin(angle) * (baseR * bloom) * p.cos(tiltAngle);
+        let y3 = -p.sin(tiltAngle) * (baseR * bloom);
+
+        // 2. Apply camera rotation matrix
+        let [rx, ry, rz] = rot3D(x3, y3, z3, mouseRotX, mouseRotY);
+        
+        // 3. Calculate perspective scale
+        let scale = focal / (focal + rz);
+        let sx = rx * scale;
+        let sy = ry * scale;
+
+        // 4. Calculate dynamic lighting based on Z depth and layer position
+        let lightMod = p.map(rz, -150, 150, 1.3, 0.4);
+        let rCol = p.constrain(p.lerp(230, 255, lr) * lightMod, 0, 255);
+        let gCol = p.constrain(p.lerp(130, 210, lr) * lightMod, 0, 255);
+        let bCol = p.constrain(p.lerp(170, 235, lr) * lightMod, 0, 255);
+
+        // 5. Calculate specific petal shape parameters
+        let pLength = baseR * scale * 1.15;
+        let pWidth = baseR * scale * 0.55;
+        let rPhase = i * 1.7 + layer * 0.9;
+        let pAngle = p.atan2(ry, rx); // Angle to point the petal outwards
+
+        //push all this data to our array instead of drawing imm
+        items.push({ 
+          z: rz, x: sx, y: sy, angle: pAngle, 
+          pl: pLength, pw: pWidth, phase: rPhase, 
+          r: rCol, g: gCol, b: bCol ,
+          scale:scale 
+        });
+      }
+    }
+
+    //DEPT SORTING (Painter's Algo)
+    //sort array so items furthest away (highest Z)are at the beginning
+    items.sort((a,b)=>b.z-a.z);
+
+    //Drawing petals
+    buffer.push();
+    buffer.translate(centerX, centerY+48); //move center slightly downward
+
+    for (let it of items){
+      buffer.push();
+      buffer.translate(it.x, it.y);
+      buffer.rotate(it.angle);
+      buffer.fill(it.r,it.g,it.b);
+
+      //draw the custom ruffled petal shape using vetices
+      buffer.beginShape();
+      //draw top half of the petal curve
+      for (let tt = 0; tt <= 1; tt += 0.1) {
+        let px = tt * it.pl;
+        let bW = p.sin(tt * p.PI) * it.pw;
+        let ruf = p.sin(tt * 8 + it.phase) * ruffleAmt * it.scale * tt;
+        buffer.vertex(px, bW + ruf);
+      }
+      // Draw bottom half of the petal curve
+      for (let tt = 1; tt >= 0; tt -= 0.1) {
+        let px = tt * it.pl;
+        let bW = p.sin(tt * p.PI) * it.pw;
+        let ruf = p.sin(tt * 8 + it.phase + p.PI) * ruffleAmt * it.scale * tt;
+        buffer.vertex(px, -bW + ruf);
+      }
+      buffer.endShape(p.CLOSE);
+      buffer.pop();
+    }
+    buffer.pop();
+
     // --- THE GENERATIVE LOOP ---
     // A 'for' loop runs a specific block of code multiple times in one frame.
-    for (let i = 0; i < numPetals; i++) {
-      // Calculate the angle for this specific petal
-      // We divide a full circle (TWO_PI) by the number of petals, then multiply by 'i'
-      let angle = (p.TWO_PI / numPetals) * i;
+    // for (let i = 0; i < numPetals; i++) {
+    //   // Calculate the angle for this specific petal
+    //   // We divide a full circle (TWO_PI) by the number of petals, then multiply by 'i'
+    //   let angle = (p.TWO_PI / numPetals) * i;
 
-      //calculate flat 3D circle (y=0)
-      let x3D = p.cos(angle)*(maxRadius*bloom);
-      let y3D = 0;
-      let z3D = p.sin(angle)*(maxRadius*bloom);
+    //   //calculate flat 3D circle (y=0)
+    //   let x3D = p.cos(angle)*(maxRadius*bloom);
+    //   let y3D = 0;
+    //   let z3D = p.sin(angle)*(maxRadius*bloom);
 
-      //applying the rotation matrix to our coordinates
-      let [rx,ry,rz] = rot3D(x3D, y3D, z3D, mouseRotX, mouseRotY);
+    //   //applying the rotation matrix to our coordinates
+    //   let [rx,ry,rz] = rot3D(x3D, y3D, z3D, mouseRotX, mouseRotY);
 
-      //perspective projection: shrink coordinates based on Z dept
-      let scale = focal / (focal +rz);
+    //   //perspective projection: shrink coordinates based on Z dept
+    //   let scale = focal / (focal +rz);
 
-      //map 3D points back to 2D screen coordinates
-      let screenX = centerX + (rx*scale);
-      let screenY = centerY + (ry*scale);
+    //   //map 3D points back to 2D screen coordinates
+    //   let screenX = centerX + (rx*scale);
+    //   let screenY = centerY + (ry*scale);
 
-      //dynamic lighting
-      //map Z-dept to brightness. Closer (negative rz) = brighter
-      let lightMod = p.map(rz, -100, 100, 1.4,0.2);
+    //   //dynamic lighting
+    //   //map Z-dept to brightness. Closer (negative rz) = brighter
+    //   let lightMod = p.map(rz, -100, 100, 1.4,0.2);
 
-      let r = p.constrain(255 * lightMod, 0, 255);
-      let g = p.constrain(100 * lightMod, 0, 255);
-      let b = p.constrain(150 * lightMod, 0, 255);
+    //   let r = p.constrain(255 * lightMod, 0, 255);
+    //   let g = p.constrain(100 * lightMod, 0, 255);
+    //   let b = p.constrain(150 * lightMod, 0, 255);
 
-      buffer.fill(r,g,b);
-      buffer.circle(screenX, screenY, 40*scale);
-    }
+    //   buffer.fill(r,g,b);
+    //   buffer.circle(screenX, screenY, 40*scale);
+    // }
 
     //pixel reading & ASCII Rendering
     //cmd p5 to load the current fram's pixel data iinto memory
     buffer.loadPixels();
 
     //spacing for our ASCII characters
-    const gridSize = 12;
+    const gridSize = 8;
     const offsetX = 100;
 
     //scan the buffer in a grid (y first, then x)
@@ -135,11 +222,11 @@ const sketch = function(p) {
 
     // --- THE STATE MACHINE (from Stage 3) ---
     if (phase === 'growing') {
-      bloom += 0.02;
+      bloom += 0.005;
       if (bloom >= 1) phase = 'shrinking'; 
     }else if (phase === 'shrinking') {
-      bloom -= 0.02;
-      if (bloom <= 0) phase = 'growing';
+      bloom -= 0.005;
+      if (bloom <= 0.1) phase = 'growing';
     }
 
   };
