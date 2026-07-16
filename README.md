@@ -11,6 +11,7 @@ This repository tracks my step-by-step progress in learning core creative coding
 - [x] **Stage 6:** Pixel Reading and ASCII Art
 - [x] **Stage 7:** Faking 3D Depth (Custom Rotation Math)
 
+learn math
 ## Tech Stack
 * HTML/CSS
 * JavaScript
